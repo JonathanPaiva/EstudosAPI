@@ -1,4 +1,5 @@
 using EstudosAPI.Models;
+using EstudosAPI.Repository;
 using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,28 +22,48 @@ app.MapGet("/users", (HttpResponse response) =>
     return new { Name = "Teste", Age = 29 };
 });
 
-app.MapPost("/productadd", (Product product) =>
-{
-    return $"{product.Code} - {product.Name}";
-});
-
 //api.app.com/user?datastart={date}&dateend={date} //parâmetros inseridos na url
 app.MapGet("getuserdate", ([FromQuery] string dateStart, [FromQuery] string dateEnd) =>
 {
     return $"{dateStart} - {dateEnd}";
 });
 
+app.MapPost("/products", (Product product) =>
+{
+    ProductRepository.Add(product);
+    return Results.Created($"/products/{product.Code}", product);
+});
+
 //api.app.com/user/{code} //parâmetros via rota
-app.MapGet("/getuser/{code}", ([FromRoute] string code) =>
+app.MapGet("/products/{code}", ([FromRoute] int code) =>
 {
-    return code;
+    Product product = ProductRepository.GetProduct(code);
+    
+    if(product == null)
+    {
+        return Results.NotFound();
+    }
+    
+    return Results.Ok(product);
+    //caso tenha um retorno de Results em algum momento, todos os retornos tem que ser do tipo Results
 });
 
-app.MapGet("/getproduct", (HttpRequest request) => 
+app.MapGet("/products", (HttpRequest request) => 
 {
-    return request.Headers["product-code"].ToString();
+    return ProductRepository.GetProducts();
 });
 
+app.MapPut("/products", (Product product) => {
+    Product productSaved = ProductRepository.GetProduct(product.Code);
+    productSaved.Name = product.Name;
+    return productSaved;
+});
+
+app.MapDelete("/products/{code}", ([FromRoute] int code) =>
+{
+    Product productSaved = ProductRepository.GetProduct(code);
+    ProductRepository.RemoveProduct(productSaved);
+});
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
