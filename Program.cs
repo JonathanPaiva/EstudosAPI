@@ -1,6 +1,8 @@
+using EstudosAPI.Data;
 using EstudosAPI.Models;
 using EstudosAPI.Repository;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,14 +13,22 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+//criação do serviço para a instância do banco de dados
+string connectionString = builder.Configuration.GetConnectionString("Connection");
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
+});
+
 var app = builder.Build();
 
-app.MapGet("/", () => "Mensagem Teste!");
-app.MapPost("/", () => new { Name = "Teste", Age = 29 });
+var configuration = app.Configuration;
+ProductRepository.Init(configuration);
 
 app.MapGet("/users", (HttpResponse response) =>
 {
     response.Headers.Add("CabecalhoTeste", "Teste");
+    
     return new { Name = "Teste", Age = 29 };
 });
 
@@ -28,9 +38,18 @@ app.MapGet("getuserdate", ([FromQuery] string dateStart, [FromQuery] string date
     return $"{dateStart} - {dateEnd}";
 });
 
+//Checando o ambiente de desenvolvimento para poder mapear a rota em questão.
+if(app.Environment.IsStaging())
+{
+    app.MapGet("/configuration/database", (IConfiguration configuration) =>
+    {
+        return Results.Ok($"{configuration["database:connection"]}/{configuration["database:port"]}");
+    });
+}
 app.MapPost("/products", (Product product) =>
 {
     ProductRepository.Add(product);
+    
     return Results.Created($"/products/{product.Code}", product);
 });
 
@@ -50,19 +69,41 @@ app.MapGet("/products/{code}", ([FromRoute] int code) =>
 
 app.MapGet("/products", (HttpRequest request) => 
 {
-    return ProductRepository.GetProducts();
+    List<Product> products = ProductRepository.GetProducts();
+    
+    if(products == null)
+    {
+        Results.NotFound();
+    }
+    
+    return Results.Ok(products);
 });
 
 app.MapPut("/products", (Product product) => {
     Product productSaved = ProductRepository.GetProduct(product.Code);
+
+    if (productSaved == null)
+    {
+        return Results.NotFound();
+    }
+
     productSaved.Name = product.Name;
-    return productSaved;
+    
+    return Results.Ok(productSaved);
 });
 
 app.MapDelete("/products/{code}", ([FromRoute] int code) =>
 {
     Product productSaved = ProductRepository.GetProduct(code);
+    
+    if(productSaved == null)
+    {
+        return Results.NotFound();
+    }
+    
     ProductRepository.RemoveProduct(productSaved);
+    
+    return Results.Ok();
 });
 
 // Configure the HTTP request pipeline.
