@@ -24,9 +24,9 @@ namespace EstudosAPI.Repository
             return Products;
         }
 
-        public static Product GetProduct(int code)
+        public static Product GetProduct(int id)
         {
-            return Products.FirstOrDefault(p => p.Code == code);  
+            return Products.FirstOrDefault(p => p.Id == id);  
         }
 
         public static void RemoveProduct(Product product)

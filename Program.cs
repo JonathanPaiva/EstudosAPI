@@ -46,18 +46,42 @@ if(app.Environment.IsStaging())
         return Results.Ok($"{configuration["database:connection"]}/{configuration["database:port"]}");
     });
 }
-app.MapPost("/products", (Product product) =>
+app.MapPost("/products", (ProductRequest productRequest, ApplicationDbContext context) =>
 {
-    ProductRepository.Add(product);
+    Category category = context.Categories.Where(c => c.Id == productRequest.CategoryId).First();
     
+    Product product = new Product
+    {
+        Code = productRequest.Code,
+        Name = productRequest.Name,
+        Description = productRequest.Description,
+        Category = category
+    };
+    
+    if(productRequest.Tags != null)
+    {
+        product.Tags = new List<Tag>();
+        
+        foreach(var tag in productRequest.Tags)
+        {
+            product.Tags.Add(new Tag { Name = tag });
+        }
+    }
+
+    context.Products.Add(product);
+    context.SaveChanges();
+        
     return Results.Created($"/products/{product.Code}", product);
 });
 
 //api.app.com/user/{code} //parâmetros via rota
-app.MapGet("/products/{code}", ([FromRoute] int code) =>
+app.MapGet("/products/{id}", ([FromRoute] int id, ApplicationDbContext context) =>
 {
-    Product product = ProductRepository.GetProduct(code);
-    
+    Product product = context.Products
+        .Include(p => p.Category)
+        .Include(p => p.Tags)
+        .Where(p => p.Id == id).First();
+
     if(product == null)
     {
         return Results.NotFound();
@@ -67,9 +91,12 @@ app.MapGet("/products/{code}", ([FromRoute] int code) =>
     //caso tenha um retorno de Results em algum momento, todos os retornos tem que ser do tipo Results
 });
 
-app.MapGet("/products", (HttpRequest request) => 
+app.MapGet("/products", (HttpRequest request, ApplicationDbContext context) => 
 {
-    List<Product> products = ProductRepository.GetProducts();
+    List<Product> products = context.Products
+        .Include(p => p.Category)
+        .Include(p => p.Tags)
+        .ToList();
     
     if(products == null)
     {
@@ -79,29 +106,52 @@ app.MapGet("/products", (HttpRequest request) =>
     return Results.Ok(products);
 });
 
-app.MapPut("/products", (Product product) => {
-    Product productSaved = ProductRepository.GetProduct(product.Code);
+app.MapPut("/products/{id}", ([FromRoute] int id, ProductRequest productRequest, ApplicationDbContext context) => {
 
-    if (productSaved == null)
+    Product product = context.Products
+        .Include(p => p.Category)
+        .Include(p => p.Tags)
+        .Where(p => p.Id == id).First();
+
+    if (product == null)
     {
         return Results.NotFound();
     }
 
-    productSaved.Name = product.Name;
-    
-    return Results.Ok(productSaved);
+    product.Code = productRequest.Code;
+    product.Name = productRequest.Name;
+    product.Description = productRequest.Description;
+    product.CategoryId = productRequest.CategoryId;
+
+    product.Tags = new List<Tag>();
+
+    if (productRequest.Tags != null)
+    {
+        product.Tags = new List<Tag>();
+
+        foreach (var tag in productRequest.Tags)
+        {
+            product.Tags.Add(new Tag { Name = tag });
+        }
+    }
+
+    context.SaveChanges();
+
+    return Results.Ok(product);
 });
 
-app.MapDelete("/products/{code}", ([FromRoute] int code) =>
+app.MapDelete("/products/{id}", ([FromRoute] int id, ApplicationDbContext context) =>
 {
-    Product productSaved = ProductRepository.GetProduct(code);
-    
-    if(productSaved == null)
+    Product product = context.Products.Where(p => p.Id == id).First();
+
+    if (product == null)
     {
         return Results.NotFound();
     }
-    
-    ProductRepository.RemoveProduct(productSaved);
+
+    context.Products.Remove(product);
+
+    context.SaveChanges();
     
     return Results.Ok();
 });
